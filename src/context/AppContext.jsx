@@ -83,8 +83,12 @@ export const AppProvider = ({ children }) => {
   // The shared relationships/{id} doc both partners read/write once paired.
   const [relationshipId, setRelationshipId] = useState(null);
 
-  // Guards against the save-on-load echo: skip the save that a snapshot triggers.
-  const fromSnapshot = useRef(false);
+  // The last relationshipData we know Firestore already has (either just loaded
+  // from a snapshot, or just written by us). We save only when the current data
+  // differs from this — which prevents the load→save echo WITHOUT ever swallowing
+  // a real user change (the old boolean guard raced with snapshot churn and
+  // dropped the first change after every snapshot, so onboarding never stuck).
+  const lastPersisted = useRef(null);
 
   // Real-time sync with Firestore for the logged-in user.
   useEffect(() => {
@@ -108,8 +112,12 @@ export const AppProvider = ({ children }) => {
       if (snap.exists()) {
         const data = snap.data();
         if (data.relationshipData) {
-          fromSnapshot.current = true;
-          setRelationshipData((prev) => ({ ...prev, ...data.relationshipData }));
+          setRelationshipData((prev) => {
+            const merged = { ...prev, ...data.relationshipData };
+            // Record what Firestore has so the save effect doesn't echo it back.
+            lastPersisted.current = JSON.stringify(merged);
+            return merged;
+          });
         }
         setRelationshipId(data.relationshipId || null);
       }
@@ -126,14 +134,16 @@ export const AppProvider = ({ children }) => {
     };
   }, [currentUser, demoMode]);
 
-  // Persist changes — but not the change that came from a snapshot.
+  // Persist changes — but not the change that came from a snapshot. We compare
+  // content (not a fragile flag), so a real user edit always saves even amid
+  // snapshot churn.
   useEffect(() => {
     if (demoMode || !currentUser || !isLoaded) return;
-    if (fromSnapshot.current) {
-      fromSnapshot.current = false;
-      return;
-    }
 
+    const json = JSON.stringify(relationshipData);
+    if (json === lastPersisted.current) return; // nothing new to write
+
+    lastPersisted.current = json; // optimistic: we're about to write exactly this
     const saveData = async () => {
       try {
         await setDoc(doc(db, 'users', currentUser.uid), {
@@ -142,6 +152,7 @@ export const AppProvider = ({ children }) => {
         }, { merge: true });
       } catch (error) {
         console.error('Error saving data:', error);
+        lastPersisted.current = null; // let a retry happen on the next change
       }
     };
 
