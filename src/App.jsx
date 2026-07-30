@@ -28,6 +28,7 @@ const ChatPage = lazy(() => import('./pages/ChatPage'));
 const PersonalityQuizPage = lazy(() => import('./pages/PersonalityQuizPage'));
 import { AppProvider, useApp } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import UpdateBanner from './components/common/UpdateBanner';
 import './App.css';
 
 // Lightweight loader shown only on a page's first visit while its chunk loads.
@@ -217,6 +218,9 @@ function App() {
     <AuthProvider>
       <AppProvider>
         <AppContent />
+        {/* Overlays every screen — surfaces "update available" when a newer
+            build is deployed while the app is open. */}
+        <UpdateBanner />
       </AppProvider>
     </AuthProvider>
   );
