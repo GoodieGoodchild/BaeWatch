@@ -27,3 +27,5 @@ CLAUDE.md
 *.njsproj
 *.sln
 *.sw?
+.vercel
+public/version.json
