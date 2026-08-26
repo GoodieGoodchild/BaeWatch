@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SafetyHeader from '../components/common/SafetyHeader';
+import SafetyNotice from '../components/common/SafetyNotice';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import { ArrowLeft, Copy, CheckCircle, ExternalLink } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { grievances, repairLens } from '../services/repairScenarios';
+import { attachmentStyles } from '../services/attachmentProfiles';
 
 // Based on Gottman Method repair principles: time-outs, radical ownership,
 // active listening, sincere apology, and active building of goodwill.
@@ -55,9 +58,17 @@ const fiveRules = [
 const TOTAL_STEPS = steps.length;
 
 export const RepairPage = ({ onNavigate }) => {
-  const { updateConnectionLevel, updateWeatherMood, relationshipData, addRepairCommitment } = useApp();
+  const { updateWeatherMood, relationshipData, addRepairCommitment, requestRepair } = useApp();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
+
+  // What happened (grievance) + the couple's attachment styles drive a
+  // personalized repair lens. Flow doesn't start until a grievance is chosen.
+  const [grievance, setGrievance] = useState(null);
+  const myStyle = relationshipData.selfInsight?.dominant || null;
+  const partnerStyle = relationshipData.partnerSync?.attachmentStyle || relationshipData.partnerInsight?.dominant || null;
+  const lens = grievance ? repairLens(grievance, myStyle) : { grievance: null, attachment: null };
+  const partnerName = relationshipData.profile?.partnerName || 'your partner';
 
   // Step 0 — flooding / contempt gate
   const [feelsFlooded, setFeelsFlooded] = useState(null);
@@ -97,8 +108,10 @@ export const RepairPage = ({ onNavigate }) => {
   };
 
   const handleDone = () => {
-    const currentLevel = relationshipData.connectionLevel ?? 72;
-    updateConnectionLevel(Math.min(100, currentLevel + 10));
+    // Repair isn't complete because the apology was sent — the hurt partner
+    // now gets asked what would actually help, and THEY close the loop.
+    // (Connection rises only when they mark it repaired.)
+    requestRepair(relationshipData.profile?.yourName || '');
     updateWeatherMood('cloudy');
     onNavigate?.('home');
   };
@@ -420,36 +433,89 @@ export const RepairPage = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Progress dots */}
-        <div className="flex justify-center gap-2 mb-6">
-          {steps.map((s, i) => (
-            <motion.div
-              key={s.id}
-              className={`h-2 rounded-full transition-all ${
-                i === step ? 'w-6 bg-bae-coral' : i < step ? 'w-2 bg-bae-coral/50' : 'w-2 bg-bae-peach'
-              }`}
-            />
-          ))}
-        </div>
+        {!grievance ? (
+          /* Step 0: what happened? — tailors the whole flow */
+          <div className="space-y-3">
+            <p className="text-center text-sm text-bae-navy/70 mb-2">
+              What happened? Pick what's closest — the guide adapts to it and to how you're wired.
+            </p>
+            {grievances.map((g) => (
+              <motion.button
+                key={g.id}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setGrievance(g.id)}
+                className="w-full text-left p-4 rounded-2xl border border-bae-peach/40 bg-bae-warm-white flex items-start gap-3 hover:bg-bae-light-peach transition"
+              >
+                <span className="text-2xl flex-shrink-0">{g.emoji}</span>
+                <div>
+                  <p className="text-sm font-semibold text-bae-navy">{g.label}</p>
+                  <p className="text-xs text-bae-navy/60">{g.desc}</p>
+                </div>
+              </motion.button>
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* Personalized repair lens */}
+            <Card variant="gradient" className="mb-5">
+              <p className="text-xs font-semibold text-bae-coral mb-1">
+                {lens.grievance?.emoji} YOUR REPAIR LENS
+              </p>
+              <p className="text-sm text-bae-navy/80 mb-3">{lens.grievance?.reframe}</p>
+              {lens.attachment ? (
+                <div className="bg-white/60 rounded-xl p-3 space-y-1.5">
+                  <p className="text-xs font-semibold text-bae-navy">
+                    {lens.attachment.emoji} As {lens.attachment.label === 'Avoidant' ? 'an' : 'a'} {lens.attachment.label} partner in this moment:
+                  </p>
+                  <p className="text-xs text-bae-navy/75">• {lens.attachment.youTend}</p>
+                  <p className="text-xs text-bae-navy/75"><strong>What helps you:</strong> {lens.attachment.whatHelps}</p>
+                  <p className="text-xs text-bae-navy/75"><strong>Try saying:</strong> <em>{lens.attachment.sayThis}</em></p>
+                </div>
+              ) : (
+                <button onClick={() => onNavigate?.('understanding-me')} className="text-xs text-bae-coral underline">
+                  Do "Understanding Me" to personalize this to your attachment style →
+                </button>
+              )}
+              {partnerStyle && attachmentStyles[partnerStyle] && (
+                <p className="text-[11px] text-bae-navy/60 mt-2">
+                  💡 {partnerName} leans <strong>{attachmentStyles[partnerStyle].label}</strong> — {attachmentStyles[partnerStyle].growthEdge?.split('.').slice(-2, -1)[0]?.trim() || 'meet them where they are'}.
+                </p>
+              )}
+              <button onClick={() => { setGrievance(null); setStep(0); }} className="text-[11px] text-bae-navy/40 underline mt-2">← different situation</button>
+            </Card>
 
-        <div className="mb-6 text-center">
-          <p className="text-2xl mb-1">{steps[step].emoji}</p>
-          <h3 className="text-lg font-bold text-bae-navy">{steps[step].title}</h3>
-        </div>
+            {/* Progress dots */}
+            <div className="flex justify-center gap-2 mb-6">
+              {steps.map((s, i) => (
+                <motion.div
+                  key={s.id}
+                  className={`h-2 rounded-full transition-all ${
+                    i === step ? 'w-6 bg-bae-coral' : i < step ? 'w-2 bg-bae-coral/50' : 'w-2 bg-bae-peach'
+                  }`}
+                />
+              ))}
+            </div>
 
-        <AnimatePresence mode="wait" custom={direction}>
-          <motion.div
-            key={step}
-            custom={direction}
-            variants={variants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
-          >
-            {stepContent[step]}
-          </motion.div>
-        </AnimatePresence>
+            <div className="mb-6 text-center">
+              <p className="text-2xl mb-1">{steps[step].emoji}</p>
+              <h3 className="text-lg font-bold text-bae-navy">{steps[step].title}</h3>
+            </div>
+
+            <AnimatePresence mode="wait" custom={direction}>
+              <motion.div
+                key={step}
+                custom={direction}
+                variants={variants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+              >
+                {stepContent[step]}
+              </motion.div>
+            </AnimatePresence>
+          </>
+        )}
 
         {/* Resources */}
         <div className="mt-8">
@@ -499,6 +565,8 @@ export const RepairPage = ({ onNavigate }) => {
             )}
           </AnimatePresence>
         </div>
+
+        <SafetyNotice showAbuseLine />
       </div>
     </motion.div>
   );

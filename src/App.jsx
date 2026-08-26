@@ -1,27 +1,46 @@
-import React, { useState, useEffect } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
+// Eager: everything a logged-out visitor needs (splash + auth).
 import SplashScreen from './pages/SplashScreen';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
-import PartnerInvitePage from './pages/PartnerInvitePage';
-import OnboardingPage from './pages/OnboardingPage';
-import HomePage from './pages/HomePage';
-import CheckInPage from './pages/CheckInPage';
-import ConversationCoachPage from './pages/ConversationCoachPage';
-import MemoriesPage from './pages/MemoriesPage';
-import GamesPage from './pages/GamesPage';
-import WeatherDetailsPage from './pages/WeatherDetailsPage';
-import ProfileEditPage from './pages/ProfileEditPage';
-import DailyQuestionPage from './pages/DailyQuestionPage';
-import BucketListPage from './pages/BucketListPage';
-import RepairPage from './pages/RepairPage';
+// Lazy: authenticated pages load on demand, keeping first paint light.
+const PartnerInvitePage = lazy(() => import('./pages/PartnerInvitePage'));
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
+const HomePage = lazy(() => import('./pages/HomePage'));
+const CheckInPage = lazy(() => import('./pages/CheckInPage'));
+const ConversationCoachPage = lazy(() => import('./pages/ConversationCoachPage'));
+const MemoriesPage = lazy(() => import('./pages/MemoriesPage'));
+const GamesPage = lazy(() => import('./pages/GamesPage'));
+const WeatherDetailsPage = lazy(() => import('./pages/WeatherDetailsPage'));
+const ProfileEditPage = lazy(() => import('./pages/ProfileEditPage'));
+const DailyQuestionPage = lazy(() => import('./pages/DailyQuestionPage'));
+const BucketListPage = lazy(() => import('./pages/BucketListPage'));
+const RepairPage = lazy(() => import('./pages/RepairPage'));
+const UnderstandingMePage = lazy(() => import('./pages/UnderstandingMePage'));
+const LoveLanguagesPage = lazy(() => import('./pages/LoveLanguagesPage'));
+const InsightsPage = lazy(() => import('./pages/InsightsPage'));
+const TimelinePage = lazy(() => import('./pages/TimelinePage'));
+const GrowthPage = lazy(() => import('./pages/GrowthPage'));
+const DatePlannerPage = lazy(() => import('./pages/DatePlannerPage'));
+const LoveLanguageQuizPage = lazy(() => import('./pages/LoveLanguageQuizPage'));
+const ManualPage = lazy(() => import('./pages/ManualPage'));
+const ChatPage = lazy(() => import('./pages/ChatPage'));
+const PersonalityQuizPage = lazy(() => import('./pages/PersonalityQuizPage'));
 import { AppProvider, useApp } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import UpdateBanner from './components/common/UpdateBanner';
 import './App.css';
+
+// Lightweight loader shown only on a page's first visit while its chunk loads.
+const PageLoader = () => (
+  <div className="min-h-screen bg-bae-cream flex items-center justify-center">
+    <span className="text-4xl animate-pulse">💕</span>
+  </div>
+);
 
 function AppContent() {
   const { currentUser } = useAuth();
-  const { updateProfile, relationshipData, isLoaded } = useApp();
+  const { updateProfile, relationshipData, isLoaded, demoMode, loadDemoData, isPaired } = useApp();
   const [currentPage, setCurrentPage] = useState('splash');
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
   const [appReady, setAppReady] = useState(false);
@@ -42,6 +61,8 @@ function AppContent() {
       const invite = params.get('invite');
       if (invite) {
         setInviteCodeFromUrl(invite);
+        // An invited partner is almost always a NEW user — open signup, not login.
+        setAuthMode('signup');
       }
     }
   }, []);
@@ -52,23 +73,53 @@ function AppContent() {
     }
   }, [currentUser, inviteCodeFromUrl]);
 
-  const handleSplashComplete = () => {
-    if (currentUser) {
-      setCurrentPage(hasOnboarded ? 'home' : 'partner-invite');
-    } else {
+  // Signing out from anywhere returns to the auth screen. (Demo mode runs
+  // without a signed-in user — don't evict it.)
+  useEffect(() => {
+    if (!currentUser && !demoMode && appReady && currentPage !== 'auth') {
       setCurrentPage('auth');
     }
+  }, [currentUser, demoMode, appReady, currentPage]);
+
+  // Signing IN routes off the auth screen. LoginPage only awaits Firebase; it's
+  // this effect that navigates once the user's data has loaded (so the gate
+  // reads a complete profile and sends returning users home, not to onboarding).
+  useEffect(() => {
+    if (currentUser && isLoaded && appReady && currentPage === 'auth') {
+      setCurrentPage(gatePage());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, isLoaded, appReady, currentPage]);
+
+  // The gate: home is only reachable once you've told us who you are.
+  // Order matters — it's the clinical intake: name/mood -> how you love ->
+  // your attachment patterns -> connect your partner. Each step's data guides
+  // the couple from day one, so nobody starts blind.
+  // invitePending: you've generated a code and sent it — you may explore while
+  // your partner signs up (the home connect card keeps pairing one tap away).
+  const gatePage = () => {
+    if (!relationshipData.profile?.yourName) return 'onboarding';
+    if (!relationshipData.profile?.yourLoveLanguage) return 'love-quiz';
+    if (!relationshipData.selfInsight?.dominant) return 'understanding-me';
+    if (!isPaired && !demoMode && !relationshipData.profile?.invitePending) return 'partner-invite';
+    return 'home';
+  };
+
+  const handleSplashComplete = () => {
+    setCurrentPage(currentUser ? gatePage() : 'auth');
     setAppReady(true);
   };
 
   const handleOnboardingComplete = (data) => {
     updateProfile(data);
     setHasOnboarded(true);
-    setCurrentPage('home');
+    setCurrentPage('love-quiz');
   };
 
+  // Any navigation to 'home' re-checks the gate, so required steps can't be
+  // skipped by wandering, but deliberate page-to-page navigation stays free.
   const handleNavigate = (page) => {
-    setCurrentPage(page);
+    setCurrentPage(page === 'home' ? gatePage() : page);
   };
 
   const switchAuthMode = (mode) => {
@@ -76,22 +127,31 @@ function AppContent() {
   };
 
   const handlePartnerInviteComplete = () => {
-    setCurrentPage(hasOnboarded ? 'home' : 'onboarding');
+    setCurrentPage(gatePage());
   };
 
-  if (!appReady || (currentUser && !isLoaded)) {
-    return (
-      <AnimatePresence mode="wait">
-        <SplashScreen key="splash" onComplete={handleSplashComplete} />
-      </AnimatePresence>
-    );
+  const handleExploreDemo = () => {
+    loadDemoData();
+    setCurrentPage('home');
+  };
+
+  // Splash renders OUTSIDE AnimatePresence: its continuous animations can stall
+  // framer's mode="wait" exit tracking and strand the app on the splash screen.
+  // A hard swap here is invisible anyway (both screens share the same palette).
+  const showSplash = !appReady || (currentUser && !isLoaded);
+  if (showSplash) {
+    return <SplashScreen onComplete={handleSplashComplete} />;
   }
 
   return (
-    <AnimatePresence mode="wait">
+    <Suspense fallback={<PageLoader />}>
       {currentPage === 'auth' ? (
         authMode === 'login' ? (
-          <LoginPage key="login" onSwitchToSignup={() => switchAuthMode('signup')} />
+          <LoginPage
+            key="login"
+            onSwitchToSignup={() => switchAuthMode('signup')}
+            onExploreDemo={handleExploreDemo}
+          />
         ) : (
           <SignupPage
             key="signup"
@@ -121,15 +181,35 @@ function AppContent() {
       ) : currentPage === 'weather' ? (
         <WeatherDetailsPage key="weather" onNavigate={handleNavigate} />
       ) : currentPage === 'profile-edit' ? (
-        <ProfileEditPage key="profile-edit" />
+        <ProfileEditPage key="profile-edit" onNavigate={handleNavigate} />
       ) : currentPage === 'daily-question' ? (
         <DailyQuestionPage key="daily-question" onNavigate={handleNavigate} />
       ) : currentPage === 'bucket-list' ? (
         <BucketListPage key="bucket-list" onNavigate={handleNavigate} />
       ) : currentPage === 'repair' ? (
         <RepairPage key="repair" onNavigate={handleNavigate} />
+      ) : currentPage === 'understanding-me' ? (
+        <UnderstandingMePage key="understanding-me" onNavigate={handleNavigate} />
+      ) : currentPage === 'insights' ? (
+        <InsightsPage key="insights" onNavigate={handleNavigate} />
+      ) : currentPage === 'love-languages' ? (
+        <LoveLanguagesPage key="love-languages" onNavigate={handleNavigate} />
+      ) : currentPage === 'timeline' ? (
+        <TimelinePage key="timeline" onNavigate={handleNavigate} />
+      ) : currentPage === 'growth' ? (
+        <GrowthPage key="growth" onNavigate={handleNavigate} />
+      ) : currentPage === 'date-planner' ? (
+        <DatePlannerPage key="date-planner" onNavigate={handleNavigate} />
+      ) : currentPage === 'love-quiz' ? (
+        <LoveLanguageQuizPage key="love-quiz" onNavigate={handleNavigate} />
+      ) : currentPage === 'manual' ? (
+        <ManualPage key="manual" onNavigate={handleNavigate} />
+      ) : currentPage === 'chat' ? (
+        <ChatPage key="chat" onNavigate={handleNavigate} />
+      ) : currentPage === 'personality' ? (
+        <PersonalityQuizPage key="personality" onNavigate={handleNavigate} />
       ) : null}
-    </AnimatePresence>
+    </Suspense>
   );
 }
 
@@ -138,6 +218,9 @@ function App() {
     <AuthProvider>
       <AppProvider>
         <AppContent />
+        {/* Overlays every screen — surfaces "update available" when a newer
+            build is deployed while the app is open. */}
+        <UpdateBanner />
       </AppProvider>
     </AuthProvider>
   );

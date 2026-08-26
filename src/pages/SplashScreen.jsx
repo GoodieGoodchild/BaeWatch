@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import FloatingHearts from '../components/common/FloatingHearts';
-import baewatch2 from '../assets/baewatch2.jpeg';
+import beachScene from '../assets/beach-scene.jpg';
+import logoMark from '../assets/logo-mark-tight.png';
 
 export const SplashScreen = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
   const [logoError, setLogoError] = useState(false);
-  const logoSrc = '/bae-watch-logo.svg';
+  const logoSrc = logoMark;
 
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export const SplashScreen = ({ onComplete }) => {
       exit={{ opacity: 0 }}
     >
       <img
-        src={baewatch2}
+        src={beachScene}
         alt="Bae Watch loading background"
         className="absolute inset-0 h-screen w-screen object-cover"
       />
@@ -40,17 +41,19 @@ export const SplashScreen = ({ onComplete }) => {
       <FloatingHearts count={8} className="absolute inset-0 opacity-30" />
 
       <div className="relative z-10 flex min-h-screen flex-col items-center justify-center gap-10 px-6 py-12">
-        <header className="w-full max-w-[90vw] text-center">
+        <header className="text-center">
           {logoError ? (
-            <div className="mx-auto mb-4 rounded-[24px] bg-bae-peach/90 px-6 py-4 text-4xl font-black uppercase tracking-[0.22em] text-bae-navy shadow-xl w-[80vw] max-w-[600px]">
+            <div className="mx-auto mb-2 rounded-2xl bg-bae-peach/90 px-5 py-3 text-2xl font-black uppercase tracking-[0.18em] text-bae-navy shadow-xl">
               Bae Watch
             </div>
           ) : (
-            <img
+            <motion.img
               src={logoSrc}
               alt="Bae Watch logo"
               onError={() => setLogoError(true)}
-              className="mx-auto mb-4 w-[80vw] max-w-[600px] object-contain"
+              animate={{ y: [0, -8, 0] }}
+              transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+              className="mx-auto mb-2 w-32 sm:w-36 object-contain drop-shadow-xl"
             />
           )}
         </header>
