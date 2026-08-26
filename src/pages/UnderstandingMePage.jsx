@@ -4,6 +4,7 @@ import { ArrowLeft, Sparkles, Heart, RefreshCw } from 'lucide-react';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import { useApp } from '../context/AppContext';
+import SafetyNotice from '../components/common/SafetyNotice';
 import { isAIConfigured } from '../services/aiService';
 import { generateTranslationCard } from '../services/insightService';
 import {
@@ -434,6 +435,8 @@ export const UnderstandingMePage = ({ onNavigate }) => {
             )}
           </motion.div>
         </>
+
+        <SafetyNotice />
       </div>
     </motion.div>
   );

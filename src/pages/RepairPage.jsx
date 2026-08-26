@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SafetyHeader from '../components/common/SafetyHeader';
+import SafetyNotice from '../components/common/SafetyNotice';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import { ArrowLeft, Copy, CheckCircle, ExternalLink } from 'lucide-react';
@@ -564,6 +565,8 @@ export const RepairPage = ({ onNavigate }) => {
             )}
           </AnimatePresence>
         </div>
+
+        <SafetyNotice showAbuseLine />
       </div>
     </motion.div>
   );
